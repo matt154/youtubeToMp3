@@ -1,9 +1,7 @@
-import json
-import os
+from datetime import datetime
+
 from apiclient.discovery import build
 from pytube import YouTube
-from moviepy.editor import *
-from pathlib import Path
 import os
 
 DEVELOPER_KEY = "AIzaSyBYVoaKQFFgha2kITO7fHQNzxdiU8VIc7I"
@@ -11,9 +9,6 @@ YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
 
 youtube_url_format = "https://www.youtube.com/watch?v="
-
-video_dir = ""
-audio_dir = ""
 
 
 def create_dir(path):
@@ -25,98 +20,71 @@ def create_dir(path):
         print("Successfully created the directory %s " % path)
 
 
-def downloadVideo(video_url, path_to_download):
+def download_video(video_url, path_to_download):
     create_dir(path_to_download)
 
-    return YouTube(video_url).streams.first().download(path_to_download)
+    return YouTube(video_url).streams.filter(only_audio=True).first().download(path_to_download)
 
-
-def convert_MP4_to_mp3_dir(path_from, path_to):
-    file_names = os.listdir(path_from)
-    create_dir(path_to)
-
-    for file_name in file_names:
-        file_dest_path = os.path.join(path_to, file_name[:-1] + "3")
-        if not os.path.exists(file_dest_path):
-            VideoFileClip(os.path.join(path_from, file_name)).audio.write_audiofile(file_dest_path)
-
-    return 0
-
-
-def convert_MP4_to_mp3(file_name, path_to):
-    create_dir(path_to)
-    VideoFileClip(file_name).audio.write_audiofile(os.path.join(path_to, file_name.split("\\")[-1][:-1] + "3"))
-
-
-# convert_MP4_to_mp3()
-
-def getFromPlaylist(playlistId):
+def get_from_play_list(playlist_id):
     youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=DEVELOPER_KEY)
     res = youtube.playlistItems().list(
         part="snippet",
-        playlistId=playlistId,
+        playlistId=playlist_id,
         maxResults="1"
     ).execute()
-    nextPageToken = res.get('nextPageToken')
+    next_page_token = res.get('nextPageToken')
 
-    while ('nextPageToken' in res):
+    while 'nextPageToken' in res:
         nextPage = youtube.playlistItems().list(
             part="snippet",
-            playlistId=playlistId,
+            playlistId=playlist_id,
             maxResults="50",
-            pageToken=nextPageToken
+            pageToken=next_page_token
         ).execute()
         res['items'] = res['items'] + nextPage['items']
 
         if 'nextPageToken' not in nextPage:
             res.pop('nextPageToken', None)
         else:
-            nextPageToken = nextPage['nextPageToken']
+            next_page_token = nextPage['nextPageToken']
 
     return res
 
 
-def getVideosId(videosDict):
+def get_videos_id(videos_dict):
     ids = []
-    for video in videosDict["items"]:
+    for video in videos_dict["items"]:
         ids.append(video["snippet"]["resourceId"]["videoId"])
 
     return ids
 
 
-# print(json.dumps(getFromPlaylist("PLNMKyY61jz91C89ijqITKyJfvg3sjOkql"), indent=6))
-# print(getFromPlaylist("PLNMKyY61jz91C89ijqITKyJfvg3sjOkql")["items"][0]["snippet"]["resourceId"]["videoId"])
+def download_playlist(video_url, to_path):
+    play_list_id = video_url.split("=")[-1]
+    for videoId in get_videos_id(get_from_play_list(play_list_id)):
+        print(download_video(youtube_url_format + videoId, to_path))
 
 
-def downloadPlaylist(videoUrl):
-    playListId = videoUrl.split("=")[-1]
-    for videoId in getVideosId(getFromPlaylist(playListId)):
-        print(downloadVideo(youtube_url_format + videoId, video_dir))
+def set_directory(dir_name):
+    if len(dir_name) == 0:
+        dir_name = datetime.now().strftime("%d/%m/%Y %H:%M:%S").replace("/", "-")
+
+    if not os.path.isabs(dir_name):
+        dir_name = os.path.join(os.getcwd(), "music", dir_name)
+
+    return dir_name
 
 
-def setDirectorys(dir_name):
-    global audio_dir
-    global video_dir
-
-    if dir_name[-1] == "\\" or dir_name[-1] == "/":
-        audio_dir = dir_name + "audio"
-        video_dir = dir_name + "video"
-    elif len(dir_name) == 0:
-        audio_dir = ".\\" + "audio"
-        video_dir = ".\\" + "video"
-    else:
-        audio_dir = dir_name + "\\audio"
-        video_dir = dir_name + "\\video"
-
-    if not os.path.isabs(audio_dir):
-        audio_dir = ".\\music\\" + audio_dir
-    if not os.path.isabs(video_dir):
-        video_dir = ".\\music\\" + video_dir
+def change_extensions_to_mp3(path):
+    print("change")
+    for file in os.listdir(path):
+        file_path = os.path.join(path, file)
+        os.rename(file_path, file_path.replace(".mp4", ".mp3"))
 
 
 def main():
-    toContinue = True
-    while toContinue:
+    to_continue = True
+    while to_continue:
         print("1. video")
         print("2. playlist")
         print("3. exit")
@@ -125,18 +93,22 @@ def main():
         options = ["1", "2", "3"]
         while code not in options:
             code = input("Invalid input!\nEnter tour choice: ")
-        intCode = int(code)
+        int_code = int(code)
 
-        if intCode == 1:
+        if int_code == 1:
             url = input("Enter the video url: ")
-            setDirectorys(input("What the name of directory you want to save in it: "))
-            convert_MP4_to_mp3(downloadVideo(url, video_dir), audio_dir)
-        if intCode == 2:
-            downloadPlaylist(input("Enter the playList url: "))
-            setDirectorys(input("What the name of directory you want to save in it: "))
-            convert_MP4_to_mp3_dir(video_dir, audio_dir)
-        if intCode == 3:
-            toContinue = False
+            directory = input("What the name of directory you want to save in it: ")
+            clips_path = set_directory(directory)
+            file_path = download_video(url, clips_path)
+            os.rename(file_path, file_path.replace(".mp4", ".mp3"))
+        if int_code == 2:
+            url = input("Enter the playList url: ")
+            directory_name = input("What the name of directory you want to save in it: ")
+            clips_path = set_directory(directory_name)
+            download_playlist(url, clips_path)
+            change_extensions_to_mp3(clips_path)
+        if int_code == 3:
+            to_continue = False
 
 
 if __name__ == "__main__":
