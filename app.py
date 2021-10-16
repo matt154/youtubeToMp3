@@ -3,6 +3,8 @@ from datetime import datetime
 from apiclient.discovery import build
 from pytube import YouTube
 import os
+from moviepy.editor import *
+
 
 DEVELOPER_KEY = "AIzaSyBYVoaKQFFgha2kITO7fHQNzxdiU8VIc7I"
 YOUTUBE_API_SERVICE_NAME = "youtube"
@@ -22,8 +24,15 @@ def create_dir(path):
 
 def download_video(video_url, path_to_download):
     create_dir(path_to_download)
-
-    return YouTube(video_url).streams.filter(only_audio=True).first().download(path_to_download)
+    try:
+        path = YouTube(video_url).streams.filter(file_extension='mp3').first().download(path_to_download)
+    except:
+        try:
+            path = YouTube(video_url).streams.filter(file_extension='mp4').first().download(path_to_download)
+        except:
+            print("song not avilbale {}".format(video_url))
+            path = ""
+    return path
 
 def get_from_play_list(playlist_id):
     youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=DEVELOPER_KEY)
@@ -78,8 +87,17 @@ def set_directory(dir_name):
 def change_extensions_to_mp3(path):
     print("change")
     for file in os.listdir(path):
-        file_path = os.path.join(path, file)
-        os.rename(file_path, file_path.replace(".mp4", ".mp3"))
+        if file.endswith(".mp4"):
+            file_path = os.path.join(path, file)
+            print(file_path)
+            VideoFileClip(file_path).audio.write_audiofile(file_path.replace(".mp4", ".mp3"))
+    for file in os.listdir(path):
+        if file.endswith(".mp4"):
+            file_path = os.path.join(path, file)
+            try:
+                os.remove(file_path)
+            except:
+                print("Can't remove {}".format(file_path))
 
 
 def main():
@@ -100,7 +118,7 @@ def main():
             directory = input("What the name of directory you want to save in it: ")
             clips_path = set_directory(directory)
             file_path = download_video(url, clips_path)
-            os.rename(file_path, file_path.replace(".mp4", ".mp3"))
+            VideoFileClip(file_path).audio.write_audiofile(file_path.replace(".mp4", ".mp3"))
         if int_code == 2:
             url = input("Enter the playList url: ")
             directory_name = input("What the name of directory you want to save in it: ")
@@ -111,5 +129,4 @@ def main():
             to_continue = False
 
 
-if __name__ == "__main__":
-    main()
+main()
